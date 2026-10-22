@@ -2,7 +2,7 @@
 
 **An energy-aware job scheduler for the German grid.** GridPilot forecasts day-ahead electricity prices and grid carbon intensity, runs flexible batch jobs in the cheapest or cleanest window before their deadline, and monitors its own health with anomaly detection.
 
-> Status: **Phase 3 — the scheduler works.** Better forecasts and monitoring are next (see Roadmap).
+> Status: **Phase 4 — weather-aware ML forecasts and a one-year savings simulation.** Monitoring is next (see Roadmap).
 
 ## How scheduling works
 
@@ -66,8 +66,11 @@ Every forecast is made as it would have been in real life: at 10:00 Berlin time 
 - Rate-limit aware: backs off on HTTP 429 and respects `Retry-After`; `coverage` finds gaps and `--only-missing` refills them
 - Three baseline forecasts with a leak-free walk-forward backtest
 - Deadline-aware job scheduler: cost, carbon or blended objective, hourly replanning, settlement against real data
+- LightGBM forecaster with weather features (wind, solar radiation, temperature), retrained monthly in a walk-forward backtest
+- Honest weather inputs: archived **2-day-old weather forecasts** from Open-Meteo, never the real historical weather, so the backtest can't see the future
+- One-year savings simulation that replays realistic jobs through the live placement code
 - FastAPI endpoints: `/jobs`, `/jobs/{id}/explain`, `/tasks`, `/prices`, `/forecast`, `/ingest/runs`, `/health`
-- 71 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
+- 77 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
 
 ## Run it locally
 
@@ -104,7 +107,8 @@ python -m app.ingest.cli backfill --days 730 --only-missing
 **Forecasts**
 
 ```powershell
-python -m app.forecast.cli backtest --days 365   # scoreboard -> reports/scoreboard.md
+python -m app.ingest.cli weather --days 730      # weather forecasts for the ML model (once)
+python -m app.forecast.cli backtest --days 365   # baselines + lgbm + savings simulation -> reports/scoreboard.md
 python -m app.forecast.cli forecast              # tomorrow's forecast, saved; see GET /forecast
 ```
 
@@ -132,11 +136,14 @@ app/
     awattar.py       fallback price client
     carbon.py        carbon-intensity estimate
     pipeline.py      fetch -> transform -> upsert, fallback, run log
+    weather.py       Open-Meteo archived weather forecasts
     coverage.py      finds incomplete days
     cli.py           check | once | backfill | coverage | worker
   forecast/
     baselines.py     naive_day, naive_week, profile_4w + the "what was known when" rules
     backtest.py      walk-forward backtest, MAE and window scores
+    ml.py            LightGBM: leak-free features, monthly walk-forward retraining
+    simulate.py      one-year savings simulation
     service.py       load data, make and store forecasts
     cli.py           backtest | forecast
   scheduler/
@@ -157,7 +164,8 @@ tests/
 - [x] Phase 2 — baseline forecasts and walk-forward backtest
 - [x] Phase 3 — job API and deadline-aware scheduler
 - [ ] Phase 3b — capacity limits (at most N jobs at once)
-- [ ] Phase 4 — LightGBM forecast and savings simulation
+- [x] Phase 4 — LightGBM forecast with weather, savings simulation
+- [ ] Phase 4b — use lgbm in the live scheduler
 - [ ] Phase 5 — Prometheus, Grafana, anomaly detection
 - [ ] Phase 6 — deployment
 
@@ -165,6 +173,7 @@ tests/
 
 - Prices and generation: **Energy-Charts / Fraunhofer ISE** ([api.energy-charts.info](https://api.energy-charts.info/)), used for non-commercial purposes with attribution.
 - Fallback prices: [aWATTar API](https://www.awattar.de/services/api), within its fair-use limits.
+- Weather forecasts: [Open-Meteo Previous Model Runs API](https://open-meteo.com/en/docs/previous-runs-api), CC BY 4.0.
 - Carbon intensity is an **estimate** based on approximate life-cycle emission factors (mostly IPCC AR5 medians); see `app/ingest/carbon.py`.
 
 ## License

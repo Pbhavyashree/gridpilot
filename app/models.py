@@ -36,6 +36,18 @@ class CarbonIntensity(Base):
     g_per_kwh: Mapped[float] = mapped_column(Float)
 
 
+class Weather(Base):
+    """Weather FORECAST for one location and hour (made about 2 days before, see app/ingest/weather.py)."""
+
+    __tablename__ = "weather"
+
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    location: Mapped[str] = mapped_column(String(32), primary_key=True)
+    wind_100m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    radiation: Mapped[float | None] = mapped_column(Float, nullable=True)
+    temp_2m: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class Forecast(Base):
     """One forecast value: made at `made_at`, for the hour starting at `target_ts`."""
 

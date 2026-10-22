@@ -16,6 +16,9 @@ COUNTRY = os.getenv("COUNTRY", "de")
 
 ENERGY_CHARTS_BASE_URL = os.getenv("ENERGY_CHARTS_BASE_URL", "https://api.energy-charts.info")
 AWATTAR_BASE_URL = os.getenv("AWATTAR_BASE_URL", "https://api.awattar.de")
+OPEN_METEO_BASE_URL = os.getenv("OPEN_METEO_BASE_URL", "https://previous-runs-api.open-meteo.com")
+# How old the weather forecasts we use are, in days. 2 is always available at 10:00 the day before.
+WEATHER_LEAD_DAYS = int(os.getenv("WEATHER_LEAD_DAYS", "2"))
 
 HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "30"))
 HTTP_RETRIES = int(os.getenv("HTTP_RETRIES", "3"))

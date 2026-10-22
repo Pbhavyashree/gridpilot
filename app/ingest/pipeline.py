@@ -13,7 +13,7 @@ import pandas as pd
 
 from app import models
 from app.db import upsert
-from app.ingest import awattar, energy_charts
+from app.ingest import awattar, energy_charts, weather
 from app.ingest.carbon import compute_carbon_intensity
 from app.ingest.http import SourceUnavailable
 
@@ -103,6 +103,28 @@ def ingest_generation(session, client: httpx.Client, start: date, end: date) -> 
     return n
 
 
+def ingest_weather(session, client: httpx.Client, start: date, end: date, chunk_days: int = 90) -> int:
+    """Weather forecasts for every location over [start, end], in chunks. Returns rows stored."""
+    total = 0
+    for name in weather.LOCATIONS:
+        cursor = start
+        while cursor <= end:
+            chunk_end = min(cursor + timedelta(days=chunk_days - 1), end)
+            started = _now()
+            try:
+                df = weather.fetch_location(client, name, cursor, chunk_end)
+            except SourceUnavailable as exc:
+                _log_run(session, "weather", f"{weather.SOURCE}:{name}", started, 0, "failed", str(exc))
+                session.commit()
+                raise
+            n = upsert(session, models.Weather, _records(df), ["ts", "location"])
+            _log_run(session, "weather", f"{weather.SOURCE}:{name}", started, n, "ok")
+            session.commit()
+            total += n
+            cursor = chunk_end + timedelta(days=1)
+    return total
+
+
 def run_once(session, client: httpx.Client, today: date | None = None) -> None:
     """The hourly job: refresh the last 2 days plus tomorrow (published around midday)."""
     today = today or _now().date()
@@ -111,6 +133,7 @@ def run_once(session, client: httpx.Client, today: date | None = None) -> None:
     for name, job in (
         ("prices", lambda: ingest_prices(session, client, start, end)),
         ("generation", lambda: ingest_generation(session, client, start, today)),
+        ("weather", lambda: ingest_weather(session, client, start, today + timedelta(days=2))),
     ):
         try:
             job()

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app import models
 from app.ingest.pipeline import run_once
 from app.queries import hourly_prices
-from tests.fixtures import AWATTAR_MARKETDATA, ENERGY_CHARTS_POWER, ENERGY_CHARTS_PRICE
+from tests.fixtures import AWATTAR_MARKETDATA, ENERGY_CHARTS_POWER, ENERGY_CHARTS_PRICE, OPEN_METEO_PREVIOUS_RUNS
 
 
 def make_client(energy_charts_price_status: int = 200) -> httpx.Client:
@@ -21,6 +21,8 @@ def make_client(energy_charts_price_status: int = 200) -> httpx.Client:
             return httpx.Response(200, json=ENERGY_CHARTS_POWER)
         if request.url.host == "api.awattar.de":
             return httpx.Response(200, json=AWATTAR_MARKETDATA)
+        if request.url.host == "previous-runs-api.open-meteo.com":
+            return httpx.Response(200, json=OPEN_METEO_PREVIOUS_RUNS)
         return httpx.Response(404)
 
     return httpx.Client(transport=httpx.MockTransport(handler))
@@ -32,8 +34,11 @@ def test_happy_path_uses_energy_charts(session):
     sources = set(session.scalars(select(models.Price.source)).all())
     assert sources == {"energy_charts"}
     statuses = {(r.dataset, r.status) for r in session.scalars(select(models.IngestRun))}
-    assert statuses == {("prices", "ok"), ("generation", "ok")}
+    assert statuses == {("prices", "ok"), ("generation", "ok"), ("weather", "ok")}
     assert session.scalars(select(models.CarbonIntensity)).first() is not None
+    locations = set(session.scalars(select(models.Weather.location)).all())
+    assert len(locations) == 6  # one fetch per location
+    assert len(session.scalars(select(models.Weather)).all()) == 12  # 2 non-null hours each
 
 
 def test_outage_falls_back_to_awattar_and_logs_it(session):

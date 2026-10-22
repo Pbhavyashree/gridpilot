@@ -41,6 +41,11 @@ def run_backtest(matrix: pd.DataFrame, metric: str, first_target: date, last_tar
     return pd.DataFrame(records, columns=["target_day", "hour", "model", "forecast", "actual"])
 
 
+def _models(predictions: pd.DataFrame) -> list[str]:
+    """Models in the order they first appear (baselines first, then any extra like lgbm)."""
+    return list(dict.fromkeys(predictions["model"]))
+
+
 def best_window_start(values: np.ndarray, k: int) -> int:
     sums = np.convolve(values, np.ones(k), mode="valid")
     return int(np.argmin(sums))
@@ -48,12 +53,13 @@ def best_window_start(values: np.ndarray, k: int) -> int:
 
 def window_scores(predictions: pd.DataFrame, k: int) -> pd.DataFrame:
     """Per model: days scored, hit rate, mean regret. Only days where every model and the actuals are complete."""
-    wide = predictions.pivot_table(index=["target_day", "hour"], columns="model", values="forecast")
+    wide = predictions.pivot_table(index=["target_day", "hour"], columns="model", values="forecast", dropna=False)
     actual = predictions.drop_duplicates(["target_day", "hour"]).set_index(["target_day", "hour"])["actual"]
     wide["actual"] = actual
+    models = _models(predictions)
 
     fixed_hours = range(24 - k + 1)
-    results = {name: {"hits": 0, "regret": []} for name in [*MODELS, *(f"fixed_{h:02d}:00" for h in fixed_hours)]}
+    results = {name: {"hits": 0, "regret": []} for name in [*models, *(f"fixed_{h:02d}:00" for h in fixed_hours)]}
     for _, day in wide.groupby(level="target_day"):
         if len(day) < 24 or day.isna().any().any():
             continue  # incomplete data, or the 23-hour DST day
@@ -61,7 +67,7 @@ def window_scores(predictions: pd.DataFrame, k: int) -> pd.DataFrame:
         best = best_window_start(truth, k)
         best_mean = truth[best : best + k].mean()
 
-        choices = {model: best_window_start(day[model].to_numpy(), k) for model in MODELS}
+        choices = {model: best_window_start(day[model].to_numpy(), k) for model in models}
         choices.update({f"fixed_{h:02d}:00": h for h in fixed_hours})
 
         for name, start in choices.items():
@@ -94,12 +100,13 @@ def window_scores(predictions: pd.DataFrame, k: int) -> pd.DataFrame:
 
 def mae_scores(predictions: pd.DataFrame) -> pd.DataFrame:
     """Per model MAE, on the hours where EVERY model had a forecast (a fair comparison)."""
-    wide = predictions.pivot_table(index=["target_day", "hour"], columns="model", values="forecast")
+    wide = predictions.pivot_table(index=["target_day", "hour"], columns="model", values="forecast", dropna=False)
     actual = predictions.drop_duplicates(["target_day", "hour"]).set_index(["target_day", "hour"])["actual"]
-    mask = wide.notna().all(axis=1) & actual.reindex(wide.index).notna()
+    models = _models(predictions)
+    mask = wide[models].notna().all(axis=1) & actual.reindex(wide.index).notna()
     wide, actual = wide[mask], actual.reindex(wide.index)[mask]
     return pd.DataFrame(
-        [{"model": m, "hours": int(mask.sum()), "mae": float((wide[m] - actual).abs().mean())} for m in MODELS]
+        [{"model": m, "hours": int(mask.sum()), "mae": float((wide[m] - actual).abs().mean())} for m in models]
     )
 
 

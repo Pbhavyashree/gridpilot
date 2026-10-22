@@ -5,6 +5,7 @@
     python -m app.ingest.cli backfill --days 730       # load history
     python -m app.ingest.cli coverage --days 730       # which days are incomplete?
     python -m app.ingest.cli backfill --days 730 --only-missing   # re-fetch just the gaps
+    python -m app.ingest.cli weather --days 730        # load weather forecasts (Phase 4)
     python -m app.ingest.cli worker                    # run forever, ingest every hour
 """
 
@@ -13,7 +14,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from app.db import SessionLocal, init_db
-from app.ingest import awattar, energy_charts
+from app.ingest import awattar, energy_charts, weather
 from app.ingest.coverage import find_gaps, to_ranges
 from app.ingest.http import make_client
 from app.ingest.pipeline import backfill, backfill_missing, run_once
@@ -33,6 +34,10 @@ def cmd_check() -> None:
                 lambda: awattar.fetch_prices(
                     client, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(hours=24)
                 ),
+            ),
+            (
+                "Open-Meteo weather forecasts",
+                lambda: weather.fetch_location(client, "north_sea", today - timedelta(days=3), today + timedelta(days=1)),
             ),
         ):
             try:
@@ -59,6 +64,18 @@ def cmd_backfill(days: int, only_missing: bool) -> None:
         else:
             backfill(session, client, days)
     log.info("Backfill finished. Run 'coverage' to check for remaining gaps.")
+
+
+def cmd_weather(days: int) -> None:
+    """Backfill weather forecasts. Open-Meteo archives them from January 2024."""
+    from app.ingest.pipeline import ingest_weather
+
+    init_db()
+    end = datetime.now(timezone.utc).date() + timedelta(days=2)
+    start = max(end - timedelta(days=days), datetime(2024, 1, 1).date())
+    with SessionLocal() as session, make_client() as client:
+        rows = ingest_weather(session, client, start, end)
+    log.info("Weather backfill finished: %d rows (%s to %s)", rows, start, end)
 
 
 def cmd_coverage(days: int) -> None:
@@ -97,6 +114,8 @@ def main() -> None:
     bf = sub.add_parser("backfill")
     bf.add_argument("--days", type=int, default=730)
     bf.add_argument("--only-missing", action="store_true", help="re-fetch only incomplete days")
+    wx = sub.add_parser("weather")
+    wx.add_argument("--days", type=int, default=730)
     cov = sub.add_parser("coverage")
     cov.add_argument("--days", type=int, default=730)
     sub.add_parser("worker")
@@ -108,6 +127,8 @@ def main() -> None:
         cmd_once()
     elif args.command == "backfill":
         cmd_backfill(args.days, args.only_missing)
+    elif args.command == "weather":
+        cmd_weather(args.days)
     elif args.command == "coverage":
         cmd_coverage(args.days)
     elif args.command == "worker":

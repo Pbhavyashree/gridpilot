@@ -33,3 +33,16 @@ AWATTAR_MARKETDATA = {
     ],
     "url": "/at/v1/marketdata",
 }
+
+# Open-Meteo previous-runs response (timeformat=unixtime), two hours, one null to show gaps.
+OPEN_METEO_PREVIOUS_RUNS = {
+    "latitude": 54.5,
+    "longitude": 8.9,
+    "hourly_units": {"time": "unixtime", "wind_speed_100m_previous_day2": "m/s"},
+    "hourly": {
+        "time": [T0, T0 + 3600, T0 + 7200],
+        "wind_speed_100m_previous_day2": [9.5, 11.0, None],
+        "shortwave_radiation_previous_day2": [0.0, 0.0, None],
+        "temperature_2m_previous_day2": [8.1, 7.9, None],
+    },
+}
