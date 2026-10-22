@@ -2,7 +2,17 @@
 
 **An energy-aware job scheduler for the German grid.** GridPilot forecasts day-ahead electricity prices and grid carbon intensity, runs flexible batch jobs in the cheapest or cleanest window before their deadline, and monitors its own health with anomaly detection.
 
-> Status: **Phase 1 — data ingestion.** Forecasting, scheduling and monitoring are next (see Roadmap).
+> Status: **Phase 2 — baseline forecasts.** Scheduling and monitoring are next (see Roadmap).
+
+## Forecast results
+
+<!-- Paste the output of reports/scoreboard.md here after running the backtest. -->
+
+_Run `python -m app.forecast.cli backtest --days 365` and paste `reports/scoreboard.md` here._
+
+Every forecast is made as it would have been in real life: at 10:00 Berlin time the day before, using only data that was published by then. Prices for today are known (the day-ahead auction ran yesterday); carbon intensity is only known through yesterday.
+
+**Regret** is the number that matters for scheduling: how much more an average hour of a 4-hour job cost in the window the forecast picked than in the truly cheapest window that day. `fixed_00:00` is the no-forecast reference, a plain cron job that always starts at midnight.
 
 ## What works today
 
@@ -11,8 +21,10 @@
 - Carbon-intensity **estimate** computed from the generation mix
 - Native 15-minute data stored as-is, resampled to hourly in one place
 - Idempotent upserts: re-running any day never creates duplicates
-- FastAPI endpoints: `/health`, `/prices`, `/ingest/runs`
-- Tests for parsing, fallback, idempotency and resampling; CI on every push
+- Rate-limit aware: backs off on HTTP 429 and respects `Retry-After`; `coverage` finds gaps and `--only-missing` refills them
+- Three baseline forecasts with a leak-free walk-forward backtest
+- FastAPI endpoints: `/health`, `/prices`, `/forecast`, `/ingest/runs`
+- 44 tests: parsing, fallback, idempotency, DST handling, no-future-data checks, scoring; CI on every push
 
 ## Run it locally
 
@@ -36,10 +48,21 @@ copy .env.example .env
 docker compose up --build
 ```
 
-Load history (about 2 years, takes a while):
+Load history (about 2 years, takes a while), then check for and fill gaps:
 
 ```powershell
-docker compose exec ingestor python -m app.ingest.cli backfill --days 730
+python -m app.ingest.cli backfill --days 730
+python -m app.ingest.cli coverage --days 730
+python -m app.ingest.cli backfill --days 730 --only-missing
+```
+
+(With Docker, prefix each with `docker compose exec ingestor`.)
+
+**Forecasts**
+
+```powershell
+python -m app.forecast.cli backtest --days 365   # scoreboard -> reports/scoreboard.md
+python -m app.forecast.cli forecast              # tomorrow's forecast, saved; see GET /forecast
 ```
 
 ## Project layout
@@ -56,7 +79,13 @@ app/
     awattar.py       fallback price client
     carbon.py        carbon-intensity estimate
     pipeline.py      fetch -> transform -> upsert, fallback, run log
-    cli.py           check | once | backfill | worker
+    coverage.py      finds incomplete days
+    cli.py           check | once | backfill | coverage | worker
+  forecast/
+    baselines.py     naive_day, naive_week, profile_4w + the "what was known when" rules
+    backtest.py      walk-forward backtest, MAE and window scores
+    service.py       load data, make and store forecasts
+    cli.py           backtest | forecast
 tests/
 ```
 
@@ -64,7 +93,7 @@ tests/
 
 - [x] Phase 0 — project setup, Docker, CI
 - [x] Phase 1 — data ingestion with fallback
-- [ ] Phase 2 — baseline forecasts and walk-forward backtest
+- [x] Phase 2 — baseline forecasts and walk-forward backtest
 - [ ] Phase 3 — job API and deadline-aware scheduler
 - [ ] Phase 4 — LightGBM forecast and savings simulation
 - [ ] Phase 5 — Prometheus, Grafana, anomaly detection

@@ -2,12 +2,15 @@
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import desc, select, text
 
 from app import models
 from app.db import SessionLocal, init_db
+from app.forecast.baselines import METRIC_UNITS
+from app.forecast.service import latest_forecast
 from app.queries import hourly_carbon, hourly_prices
 
 
@@ -58,6 +61,25 @@ def prices(hours_back: int = Query(24, ge=1, le=24 * 31), hours_ahead: int = Que
         }
         for row in merged.itertuples()
     ]
+
+
+@app.get("/forecast")
+def forecast(
+    metric: Literal["price", "carbon"] = "price",
+    model: Literal["naive_day", "naive_week", "profile_4w"] = "profile_4w",
+    session=Depends(get_session),
+):
+    """The most recent stored forecast. Create one with: python -m app.forecast.cli forecast"""
+    rows = latest_forecast(session, metric, model)
+    if not rows:
+        raise HTTPException(status_code=404, detail="no forecast yet; run: python -m app.forecast.cli forecast")
+    return {
+        "metric": metric,
+        "model": model,
+        "unit": METRIC_UNITS[metric],
+        "made_at": rows[0].made_at.isoformat(),
+        "values": [{"ts": r.target_ts.isoformat(), "value": round(r.value, 2)} for r in rows],
+    }
 
 
 @app.get("/ingest/runs")

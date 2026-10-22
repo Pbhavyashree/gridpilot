@@ -36,6 +36,18 @@ class CarbonIntensity(Base):
     g_per_kwh: Mapped[float] = mapped_column(Float)
 
 
+class Forecast(Base):
+    """One forecast value: made at `made_at`, for the hour starting at `target_ts`."""
+
+    __tablename__ = "forecasts"
+
+    made_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    target_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    metric: Mapped[str] = mapped_column(String(16), primary_key=True)  # price | carbon
+    model: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[float] = mapped_column(Float)
+
+
 class IngestRun(Base):
     __tablename__ = "ingest_runs"
 

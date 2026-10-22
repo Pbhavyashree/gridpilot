@@ -119,20 +119,46 @@ def run_once(session, client: httpx.Client, today: date | None = None) -> None:
             log.error("%s ingest failed: %s", name, exc)
 
 
-def backfill(session, client: httpx.Client, days: int, pause_seconds: float = 1.0) -> None:
+def _backfill_range(session, client, start: date, end: date, prices: bool, generation: bool) -> None:
+    log.info("Backfilling %s to %s", start, end)
+    jobs = []
+    if prices:
+        jobs.append(lambda: ingest_prices(session, client, start, end, allow_fallback=False))
+    if generation:
+        jobs.append(lambda: ingest_generation(session, client, start, end))
+    for job in jobs:
+        try:
+            job()
+        except SourceUnavailable as exc:
+            log.error("Chunk %s-%s failed, continuing: %s", start, end, exc)
+
+
+def backfill(session, client: httpx.Client, days: int, pause_seconds: float = 3.0) -> None:
     """Load history in ~monthly chunks, oldest first. No aWATTar fallback (rate limits)."""
     end = _now().date()
     cursor = end - timedelta(days=days)
     while cursor <= end:
         chunk_end = min(cursor + timedelta(days=29), end)
-        log.info("Backfilling %s to %s", cursor, chunk_end)
-        for job in (
-            lambda: ingest_prices(session, client, cursor, chunk_end, allow_fallback=False),
-            lambda: ingest_generation(session, client, cursor, chunk_end),
-        ):
-            try:
-                job()
-            except SourceUnavailable as exc:
-                log.error("Chunk %s-%s failed, continuing: %s", cursor, chunk_end, exc)
+        _backfill_range(session, client, cursor, chunk_end, prices=True, generation=True)
         cursor = chunk_end + timedelta(days=1)
         time.sleep(pause_seconds)
+
+
+def backfill_missing(session, client: httpx.Client, days: int, pause_seconds: float = 3.0) -> dict[str, int]:
+    """Re-fetch only the days that are incomplete. Returns how many days were missing per dataset."""
+    from app.ingest.coverage import find_gaps, to_ranges
+
+    gaps = find_gaps(session, days)
+    for dataset, generation in (("prices", False), ("carbon", True)):
+        for start, end in to_ranges(gaps[dataset]):
+            # One extra day on each side covers the UTC/Berlin offset at the edges.
+            _backfill_range(
+                session,
+                client,
+                start - timedelta(days=1),
+                end + timedelta(days=1),
+                prices=not generation,
+                generation=generation,
+            )
+            time.sleep(pause_seconds)
+    return {name: len(missing) for name, missing in gaps.items()}
