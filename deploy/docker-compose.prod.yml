@@ -1,0 +1,120 @@
+# GridPilot in production, on the same server as energy-hub and bahnwatch.
+#
+#   cd ~/gridpilot/deploy
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# (setup.sh does all of this for you.)
+#
+# Differences from the development docker-compose.yml:
+#   - NO published ports. bahnwatch already uses port 8000 on this host, and nothing
+#     here needs to be reachable directly: energy-hub's Caddy reverse-proxies the API
+#     and Grafana over HTTPS through the shared `deploy_default` network.
+#   - Secrets come from deploy/.env (never committed).
+#   - Memory limits, so GridPilot can never starve energy-hub or bahnwatch.
+
+name: gridpilot
+
+x-app: &app
+  build:
+    context: ..
+  restart: unless-stopped
+  environment: &app-env
+    DATABASE_URL: postgresql+psycopg://gridpilot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/gridpilot
+    API_KEY: ${API_KEY:?set API_KEY in deploy/.env}
+    ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    FORECAST_MODEL: lgbm
+    MODEL_DIR: /app/models
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gridpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: gridpilot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gridpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 1g
+
+  api:
+    <<: *app
+    volumes:
+      - models:/app/models
+    networks:
+      default: {}
+      edge:
+        aliases: [gridpilot-api]  # the name Caddy uses
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    mem_limit: 1g
+
+  ingestor:
+    <<: *app
+    command: ["python", "-m", "app.ingest.cli", "worker"]
+    mem_limit: 768m
+
+  scheduler:
+    <<: *app
+    command: ["python", "-m", "app.scheduler.cli", "worker"]
+    volumes:
+      - models:/app/models
+    mem_limit: 2g  # weekly model retraining happens here
+
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=90d
+    volumes:
+      - ./prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
+    mem_limit: 512m
+
+  grafana:
+    image: grafana/grafana-oss:11.6.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in deploy/.env}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # anyone can VIEW the dashboard; only admin can change it
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SERVER_ROOT_URL: https://${GRIDPILOT_DOMAIN:-gridpilot.duckdns.org}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/gridpilot.json
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    networks:
+      default: {}
+      edge:
+        aliases: [gridpilot-grafana]
+    depends_on:
+      - prometheus
+    mem_limit: 512m
+
+networks:
+  edge:
+    external: true
+    name: deploy_default  # energy-hub's network, where Caddy lives
+
+volumes:
+  pgdata:
+  models:
+  promdata:
+  grafanadata:

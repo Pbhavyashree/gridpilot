@@ -1,0 +1,27 @@
+
+# ---- GridPilot (added by gridpilot/deploy/setup.sh) ----
+# The API and Grafana run in GridPilot's own compose project and join this
+# network as gridpilot-api / gridpilot-grafana.
+__GRIDPILOT_DOMAIN__ {
+	encode zstd gzip
+
+	# Prometheus scrapes /metrics inside Docker; no reason to publish it.
+	handle /metrics {
+		respond 404
+	}
+
+	redir /grafana /grafana/
+	handle /grafana/* {
+		reverse_proxy gridpilot-grafana:3000
+	}
+
+	handle {
+		reverse_proxy gridpilot-api:8000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

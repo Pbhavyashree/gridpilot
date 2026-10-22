@@ -4,7 +4,7 @@
 
 **Result:** replaying a year of real German grid data (Oct 2025 to Oct 2026), GridPilot's weather-aware scheduler cut the electricity cost of a set of everyday batch jobs by **50%** and their emissions by **42%** compared with a nightly cron job, capturing **97% / 96%** of what perfect foresight could have achieved.
 
-> Status: **Phase 5 — GridPilot monitors itself.** Deployment is next (see Roadmap).
+> Status: **Live.** Running around the clock at https://gridpilot.duckdns.org (API docs at `/docs`, dashboard at `/grafana/`).
 
 ## How scheduling works
 
@@ -48,6 +48,19 @@ The API serves `GET /incidents`, `GET /incidents/{id}` and Prometheus metrics at
 **Dashboard:** `docker compose up prometheus grafana`, then open http://localhost:3000. The GridPilot dashboard loads automatically and shows health, prices, carbon, ingest freshness, jobs and model age. Prometheus mirrors the main checks as alert rules at http://localhost:9090/alerts.
 
 The tests replay the autumn 2026 Energy-Charts outage: three failed runs open a fallback incident quoting the real 503 error, and the incident resolves itself once the source answers again.
+
+## Deployment
+
+GridPilot runs on an Oracle Cloud Ampere (ARM) instance, next to two other services on the same machine. It publishes **no ports of its own**: the existing Caddy reverse proxy terminates HTTPS and routes `gridpilot.duckdns.org` to the API and Grafana over a shared Docker network. Memory limits keep it from ever starving its neighbours.
+
+```bash
+git clone https://github.com/Pbhavyashree/gridpilot.git ~/gridpilot
+bash ~/gridpilot/deploy/setup.sh       # secrets, build, start, Caddy route (validated, auto-rollback)
+bash ~/gridpilot/deploy/load-data.sh   # 2 years of data + weather, train the models
+bash ~/gridpilot/deploy/update.sh      # later: pull and redeploy, keeping data and models
+```
+
+After that it runs unattended: hourly ingest, hourly replanning, health checks every 15 minutes, a stored day-ahead forecast every morning for drift detection, and a weekly retraining job that GridPilot schedules into the lowest-carbon window of the weekend. Writing endpoints need an API key; reading is public.
 
 ## Forecast results
 
@@ -124,7 +137,7 @@ Every forecast is made as it would have been in real life: at 10:00 Berlin time 
 - The live scheduler uses `lgbm` (retrained by a scheduled job, so GridPilot picks a low-carbon window for its own retraining) and falls back safely when no model exists; `GET /models` shows what's trained
 - FastAPI endpoints: `/jobs`, `/jobs/{id}/explain`, `/tasks`, `/prices`, `/forecast`, `/ingest/runs`, `/health`
 - Self-monitoring: health checks every 15 min, incidents with written notes that open and resolve themselves, forecast drift detection, Prometheus metrics, a provisioned Grafana dashboard, optional Discord/Slack alerts
-- 98 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
+- 99 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
 
 ## Run it locally
 
@@ -218,6 +231,7 @@ app/
     jobs.py          /jobs, /jobs/{id}/explain, /tasks, /models
     monitoring.py    /metrics, /incidents
 monitoring/          Prometheus config + alert rules, Grafana datasource + dashboard
+deploy/              production compose, Caddy site, setup / load-data / update scripts
 tests/
 ```
 
@@ -231,7 +245,7 @@ tests/
 - [x] Phase 4 — LightGBM forecast with weather, savings simulation
 - [x] Phase 4b — use lgbm in the live scheduler
 - [x] Phase 5 — self-monitoring: incidents, drift detection, Prometheus, Grafana
-- [ ] Phase 6 — deployment
+- [x] Phase 6 — deployed: Docker Compose behind Caddy on Oracle Cloud ARM, self-scheduled weekly retraining
 
 ## Data and attribution
 

@@ -131,3 +131,13 @@ def test_cancelled_jobs_never_run(seeded):
     seeded.commit()
     assert run_due(seeded, job.deadline) == []
     assert seeded.scalars(select(models.Job.status)).one() == "cancelled"
+
+
+def test_weekly_retrain_is_submitted_once(seeded):
+    from app.scheduler.cli import submit_weekly_retrain
+
+    first = submit_weekly_retrain(NOW)
+    assert first is not None and first.task == "retrain_models" and first.objective == "carbon"
+    assert submit_weekly_retrain(NOW) is None  # one already waiting: don't queue a second
+    retrains = seeded.scalars(select(models.Job).where(models.Job.task == "retrain_models")).all()
+    assert len(retrains) == 1

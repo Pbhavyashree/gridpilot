@@ -94,6 +94,35 @@ def monitor() -> None:
     log.info("monitor: %s", {k: len(v) for k, v in result.items()})
 
 
+def submit_weekly_retrain(now: datetime | None = None) -> models.Job | None:
+    """Every Saturday: ask GridPilot to retrain its own models, in the cleanest window of the weekend.
+
+    Skipped if a retrain job is already waiting, so a restarted worker never queues two.
+    """
+    now = now or _now()
+    with SessionLocal() as session:
+        pending = session.scalar(
+            select(models.Job).where(models.Job.task == "retrain_models", models.Job.status.in_(["planned", "running"]))
+        )
+        if pending is not None:
+            log.info("Retrain job #%s already pending; not adding another", pending.id)
+            return None
+        job = create_job(
+            session,
+            {
+                "name": "Weekly model retrain",
+                "task": "retrain_models",
+                "duration_hours": 2,
+                "power_kw": 5.0,
+                "deadline": now + timedelta(hours=40),
+                "objective": "carbon",
+            },
+            now,
+        )
+        log.info("Weekly retrain planned for %s", job.planned_start)
+        return job
+
+
 def store_day_ahead_forecast() -> None:
     """Keep the forecast the scheduler plans with, so drift detection can score it tomorrow."""
     from app.scheduler.tasks import TASKS
@@ -116,8 +145,11 @@ def cmd_worker() -> None:
     scheduler.add_job(
         store_day_ahead_forecast, "cron", hour=10, minute=5, timezone=BERLIN, id="day-ahead-forecast", max_instances=1, coalesce=True
     )
+    scheduler.add_job(
+        submit_weekly_retrain, "cron", day_of_week="sat", hour=6, timezone=BERLIN, id="weekly-retrain", max_instances=1, coalesce=True
+    )
     log.info("Scheduler worker started: due jobs every minute, replan + settle hourly, health checks every 15 min, "
-             "day-ahead forecast stored daily at 10:05 Berlin")
+             "day-ahead forecast stored daily at 10:05 Berlin, model retraining submitted every Saturday")
     scheduler.start()
 
 
