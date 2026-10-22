@@ -86,16 +86,38 @@ def tick(replan: bool = True) -> None:
     log.info("tick: ran %s, replanned %d moved, settled %d", ran or "nothing", moved, settled)
 
 
+def monitor() -> None:
+    from app.monitor.incidents import run_monitor
+
+    with SessionLocal() as session:
+        result = run_monitor(session, _now())
+    log.info("monitor: %s", {k: len(v) for k, v in result.items()})
+
+
+def store_day_ahead_forecast() -> None:
+    """Keep the forecast the scheduler plans with, so drift detection can score it tomorrow."""
+    from app.scheduler.tasks import TASKS
+
+    with SessionLocal() as session:
+        log.info(TASKS["refresh_forecasts"].run(session))
+
+
 def cmd_worker() -> None:
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     init_db()
     tick()
+    monitor()
     scheduler = BlockingScheduler(timezone="UTC")
     scheduler.add_job(lambda: tick(replan=False), "cron", second=30, id="run-due", max_instances=1, coalesce=True)
     # :10 past the hour, after the ingestor's :05 run has brought in fresh data
     scheduler.add_job(tick, "cron", minute=10, second=45, id="replan-settle", max_instances=1, coalesce=True)
-    log.info("Scheduler worker started: due jobs every minute, replan + settle hourly at :10")
+    scheduler.add_job(monitor, "cron", minute="*/15", second=50, id="monitor", max_instances=1, coalesce=True)
+    scheduler.add_job(
+        store_day_ahead_forecast, "cron", hour=10, minute=5, timezone=BERLIN, id="day-ahead-forecast", max_instances=1, coalesce=True
+    )
+    log.info("Scheduler worker started: due jobs every minute, replan + settle hourly, health checks every 15 min, "
+             "day-ahead forecast stored daily at 10:05 Berlin")
     scheduler.start()
 
 

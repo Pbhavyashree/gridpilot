@@ -33,3 +33,10 @@ REPLAN_FREEZE_MINUTES = int(os.getenv("REPLAN_FREEZE_MINUTES", "15"))  # don't m
 
 # If set, POST/DELETE on /jobs need the header  X-API-Key: <value>.  Leave empty for local dev.
 API_KEY = os.getenv("API_KEY", "")
+
+# Monitoring (Phase 5)
+STALE_FEED_HOURS = float(os.getenv("STALE_FEED_HOURS", "3"))  # no successful ingest for this long -> incident
+FAILED_RUNS_ALERT = int(os.getenv("FAILED_RUNS_ALERT", "2"))  # this many failures in a row -> incident
+MODEL_MAX_AGE_DAYS = float(os.getenv("MODEL_MAX_AGE_DAYS", "10"))
+# Optional: a Discord or Slack incoming-webhook URL; new and resolved incidents get posted there.
+ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")

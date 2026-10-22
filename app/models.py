@@ -98,6 +98,24 @@ class Job(Base):
     realised_co2_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class Incident(Base):
+    """Something GridPilot noticed is wrong with itself. Opened by the monitor, resolved when it clears."""
+
+    __tablename__ = "incidents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(80), index=True)  # e.g. "ingest:prices"; one open incident per key
+    kind: Mapped[str] = mapped_column(String(32))
+    severity: Mapped[str] = mapped_column(String(16))  # warning | critical
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)  # open | resolved
+    title: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str] = mapped_column(Text)  # Markdown write-up: what, since when, evidence, what was done
+    first_seen: Mapped[datetime] = mapped_column(UTCDateTime)
+    last_seen: Mapped[datetime] = mapped_column(UTCDateTime)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    checks: Mapped[int] = mapped_column(Integer, default=1)  # how many monitor runs saw it
+
+
 class IngestRun(Base):
     __tablename__ = "ingest_runs"
 

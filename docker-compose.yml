@@ -51,6 +51,41 @@ services:
       db:
         condition: service_healthy
 
+  # ---- monitoring (Phase 5) ----
+  # Whole stack:            docker compose up --build
+  # Only the dashboards,
+  # with the API on your PC: docker compose up prometheus grafana   (then run uvicorn as usual)
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # lets it reach an API running directly on your computer
+
+  grafana:
+    image: grafana/grafana-oss:11.6.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # visitors can view dashboards without logging in
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/gridpilot.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
   models:
+  promdata:
+  grafanadata:

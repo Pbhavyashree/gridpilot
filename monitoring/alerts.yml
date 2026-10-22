@@ -1,0 +1,44 @@
+# Mirrors GridPilot's own health checks, so they also show up in Prometheus' Alerts page.
+# GridPilot opens incidents itself (GET /incidents); these rules are the Prometheus-native view.
+groups:
+  - name: gridpilot
+    rules:
+      - alert: GridPilotFeedStale
+        expr: gridpilot_ingest_last_success_age_seconds > 3 * 3600
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "No successful {{ $labels.dataset }} ingest for over 3 hours"
+
+      - alert: GridPilotPriceFallbackActive
+        expr: gridpilot_price_fallback_active == 1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Energy-Charts is down; prices come from the aWATTar fallback"
+
+      - alert: GridPilotNoPricesAhead
+        expr: gridpilot_prices_published_ahead_hours < 6
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "Fewer than 6 hours of published prices ahead"
+
+      - alert: GridPilotJobsOverdue
+        expr: gridpilot_jobs_overdue > 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Jobs are overdue; is the scheduler worker running?"
+
+      - alert: GridPilotCriticalIncident
+        expr: gridpilot_incidents_open{severity="critical"} > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "GridPilot has an open critical incident (see /incidents)"
+
+      - alert: GridPilotModelStale
+        expr: gridpilot_model_age_hours > 240
+        labels: {severity: warning}
+        annotations:
+          summary: "The {{ $labels.metric }} model is over 10 days old"

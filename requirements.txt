@@ -8,4 +8,5 @@ python-dotenv==1.2.4
 APScheduler==3.11.3
 lightgbm==4.7.0
 holidays==0.107
+prometheus-client==0.26.0
 pytest==9.1.1

@@ -9,6 +9,7 @@ from sqlalchemy import desc, select, text
 
 from app import models
 from app.api.jobs import router as jobs_router
+from app.api.monitoring import router as monitoring_router
 from app.db import SessionLocal, init_db
 from app.forecast.baselines import METRIC_UNITS
 from app.forecast.service import latest_forecast
@@ -24,10 +25,11 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="GridPilot",
     description="Energy-aware job scheduler for the German grid. Data: Energy-Charts / Fraunhofer ISE, aWATTar.",
-    version="0.3.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 app.include_router(jobs_router)
+app.include_router(monitoring_router)
 
 
 def get_session():

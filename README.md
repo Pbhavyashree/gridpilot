@@ -4,7 +4,7 @@
 
 **Result:** replaying a year of real German grid data (Oct 2025 to Oct 2026), GridPilot's weather-aware scheduler cut the electricity cost of a set of everyday batch jobs by **50%** and their emissions by **42%** compared with a nightly cron job, capturing **97% / 96%** of what perfect foresight could have achieved.
 
-> Status: **Phase 4b — the live scheduler plans with the weather-aware LightGBM model.** Monitoring is next (see Roadmap).
+> Status: **Phase 5 — GridPilot monitors itself.** Deployment is next (see Roadmap).
 
 ## How scheduling works
 
@@ -23,6 +23,31 @@ POST /jobs
 5. **Settle**: once the window has passed, compute what the job *really* cost from measured data, next to what was expected.
 
 `GET /jobs/{id}/explain` shows the curve it planned against (with which hours were real data and which were forecasts), what running immediately would have cost, and the savings.
+
+## How GridPilot watches itself
+
+Every 15 minutes the scheduler worker runs a set of health checks. A problem becomes an **incident** with a written note (what's wrong, since when, the evidence, what GridPilot already did about it, and the next step), and the incident **resolves itself** when the problem goes away.
+
+| Check | Catches |
+| --- | --- |
+| Feed failing / stopped | An API failing several runs in a row, or no ingest for over 3 h |
+| Fallback active | Energy-Charts down, prices coming from aWATTar |
+| Data | Fewer than 6 h of published prices ahead, lagging carbon data, physically impossible values |
+| Jobs | Overdue jobs (worker not running), missed deadlines, failures, runs far slower than usual |
+| Forecast drift | The live forecast's daily error well above its normal level (robust z-score on stored day-ahead forecasts) |
+| Models | No trained model, or a model older than 10 days |
+
+```powershell
+python -m app.monitor.cli check        # run all checks now
+python -m app.monitor.cli incidents    # list incidents
+python -m app.monitor.cli show 3       # read incident #3's write-up
+```
+
+The API serves `GET /incidents`, `GET /incidents/{id}` and Prometheus metrics at `/metrics`. Set `ALERT_WEBHOOK_URL` to a Discord or Slack webhook to get a message when an incident opens or resolves.
+
+**Dashboard:** `docker compose up prometheus grafana`, then open http://localhost:3000. The GridPilot dashboard loads automatically and shows health, prices, carbon, ingest freshness, jobs and model age. Prometheus mirrors the main checks as alert rules at http://localhost:9090/alerts.
+
+The tests replay the autumn 2026 Energy-Charts outage: three failed runs open a fallback incident quoting the real 503 error, and the incident resolves itself once the source answers again.
 
 ## Forecast results
 
@@ -98,7 +123,8 @@ Every forecast is made as it would have been in real life: at 10:00 Berlin time 
 - One-year savings simulation that replays realistic jobs through the live placement code
 - The live scheduler uses `lgbm` (retrained by a scheduled job, so GridPilot picks a low-carbon window for its own retraining) and falls back safely when no model exists; `GET /models` shows what's trained
 - FastAPI endpoints: `/jobs`, `/jobs/{id}/explain`, `/tasks`, `/prices`, `/forecast`, `/ingest/runs`, `/health`
-- 84 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
+- Self-monitoring: health checks every 15 min, incidents with written notes that open and resolve themselves, forecast drift detection, Prometheus metrics, a provisioned Grafana dashboard, optional Discord/Slack alerts
+- 98 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
 
 ## Run it locally
 
@@ -182,8 +208,16 @@ app/
     service.py       create, replan, run, settle
     tasks.py         the whitelist of things a job may run
     cli.py           demo | list | tick | worker
+  monitor/
+    checks.py        health checks (feeds, data, jobs, models)
+    drift.py         forecast drift from stored day-ahead forecasts
+    incidents.py     open / update / resolve incidents, write the notes, webhook
+    metrics.py       Prometheus metrics, read from the database on each scrape
+    cli.py           check | incidents | show
   api/
-    jobs.py          /jobs, /jobs/{id}/explain, /tasks
+    jobs.py          /jobs, /jobs/{id}/explain, /tasks, /models
+    monitoring.py    /metrics, /incidents
+monitoring/          Prometheus config + alert rules, Grafana datasource + dashboard
 tests/
 ```
 
@@ -196,7 +230,7 @@ tests/
 - [ ] Phase 3b — capacity limits (at most N jobs at once)
 - [x] Phase 4 — LightGBM forecast with weather, savings simulation
 - [x] Phase 4b — use lgbm in the live scheduler
-- [ ] Phase 5 — Prometheus, Grafana, anomaly detection
+- [x] Phase 5 — self-monitoring: incidents, drift detection, Prometheus, Grafana
 - [ ] Phase 6 — deployment
 
 ## Data and attribution
