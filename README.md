@@ -4,7 +4,7 @@
 
 **Result:** replaying a year of real German grid data (Oct 2025 to Oct 2026), GridPilot's weather-aware scheduler cut the electricity cost of a set of everyday batch jobs by **50%** and their emissions by **42%** compared with a nightly cron job, capturing **97% / 96%** of what perfect foresight could have achieved.
 
-> Status: **Live.** Running around the clock at https://gridpilot.duckdns.org (API docs at `/docs`, dashboard at `/grafana/`).
+> Status: **Live** at https://gridpilot.duckdns.org. The front page answers *"when should I run this?"* for the next 48 hours; API docs are at `/docs`, the monitoring dashboard at `/grafana/`.
 
 ## How scheduling works
 
@@ -130,6 +130,7 @@ Every forecast is made as it would have been in real life: at 10:00 Berlin time 
 - Idempotent upserts: re-running any day never creates duplicates
 - Rate-limit aware: backs off on HTTP 429 and respects `Retry-After`; `coverage` finds gaps and `--only-missing` refills them
 - Three baseline forecasts with a leak-free walk-forward backtest
+- A public front page: pick a job length, deadline and goal, and see the best start time and the saving, over a 48-hour "grid ribbon" of carbon intensity and price. Plain HTML/CSS/JS, self-hosted fonts, no third-party requests
 - Deadline-aware job scheduler: cost, carbon or blended objective, hourly replanning, settlement against real data
 - LightGBM forecaster with weather features (wind, solar radiation, temperature), retrained monthly in a walk-forward backtest
 - Honest weather inputs: archived **2-day-old weather forecasts** from Open-Meteo, never the real historical weather, so the backtest can't see the future
@@ -137,7 +138,7 @@ Every forecast is made as it would have been in real life: at 10:00 Berlin time 
 - The live scheduler uses `lgbm` (retrained by a scheduled job, so GridPilot picks a low-carbon window for its own retraining) and falls back safely when no model exists; `GET /models` shows what's trained
 - FastAPI endpoints: `/jobs`, `/jobs/{id}/explain`, `/tasks`, `/prices`, `/forecast`, `/ingest/runs`, `/health`
 - Self-monitoring: health checks every 15 min, incidents with written notes that open and resolve themselves, forecast drift detection, Prometheus metrics, a provisioned Grafana dashboard, optional Discord/Slack alerts
-- 99 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
+- 104 tests: parsing, fallback, DST handling, no-future-data checks, placement edge cases, job lifecycle, API; CI on every push
 
 ## Run it locally
 
@@ -227,7 +228,9 @@ app/
     incidents.py     open / update / resolve incidents, write the notes, webhook
     metrics.py       Prometheus metrics, read from the database on each scrape
     cli.py           check | incidents | show
+  static/            the front page (index.html, app.css, app.js, self-hosted fonts)
   api/
+    site.py          /, /overview, /plan/preview (public, read-only, cached)
     jobs.py          /jobs, /jobs/{id}/explain, /tasks, /models
     monitoring.py    /metrics, /incidents
 monitoring/          Prometheus config + alert rules, Grafana datasource + dashboard

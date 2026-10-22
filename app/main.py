@@ -5,11 +5,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc, select, text
 
 from app import models
 from app.api.jobs import router as jobs_router
 from app.api.monitoring import router as monitoring_router
+from app.api.site import STATIC
+from app.api.site import router as site_router
 from app.db import SessionLocal, init_db
 from app.forecast.baselines import METRIC_UNITS
 from app.forecast.service import latest_forecast
@@ -30,6 +33,8 @@ app = FastAPI(
 )
 app.include_router(jobs_router)
 app.include_router(monitoring_router)
+app.include_router(site_router)
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 def get_session():
