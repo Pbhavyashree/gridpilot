@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gridpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gridpilot}
+      POSTGRES_DB: ${POSTGRES_DB:-gridpilot}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gridpilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gridpilot}:${POSTGRES_PASSWORD:-gridpilot}@db:5432/${POSTGRES_DB:-gridpilot}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ingestor:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "app.ingest.cli", "worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gridpilot}:${POSTGRES_PASSWORD:-gridpilot}@db:5432/${POSTGRES_DB:-gridpilot}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
