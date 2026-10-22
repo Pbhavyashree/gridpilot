@@ -52,7 +52,8 @@ def window_scores(predictions: pd.DataFrame, k: int) -> pd.DataFrame:
     actual = predictions.drop_duplicates(["target_day", "hour"]).set_index(["target_day", "hour"])["actual"]
     wide["actual"] = actual
 
-    results = {name: {"hits": 0, "regret": []} for name in [*MODELS, f"fixed_{FIXED_START_HOUR:02d}:00"]}
+    fixed_hours = range(24 - k + 1)
+    results = {name: {"hits": 0, "regret": []} for name in [*MODELS, *(f"fixed_{h:02d}:00" for h in fixed_hours)]}
     for _, day in wide.groupby(level="target_day"):
         if len(day) < 24 or day.isna().any().any():
             continue  # incomplete data, or the 23-hour DST day
@@ -61,11 +62,21 @@ def window_scores(predictions: pd.DataFrame, k: int) -> pd.DataFrame:
         best_mean = truth[best : best + k].mean()
 
         choices = {model: best_window_start(day[model].to_numpy(), k) for model in MODELS}
-        choices[f"fixed_{FIXED_START_HOUR:02d}:00"] = FIXED_START_HOUR
+        choices.update({f"fixed_{h:02d}:00": h for h in fixed_hours})
 
         for name, start in choices.items():
             results[name]["hits"] += int(start == best)
             results[name]["regret"].append(truth[start : start + k].mean() - best_mean)
+
+    # Keep two fixed-time references: midnight (a typical cron job), and the single best
+    # fixed hour IN HINDSIGHT. The second one cheats (it was picked after seeing the whole
+    # period), so beating it is the convincing result.
+    fixed = {name: r for name, r in results.items() if name.startswith("fixed_")}
+    best_fixed = min(fixed, key=lambda name: np.mean(fixed[name]["regret"]) if fixed[name]["regret"] else np.inf)
+    midnight = f"fixed_{FIXED_START_HOUR:02d}:00"
+    results = {name: r for name, r in results.items() if not name.startswith("fixed_")}
+    results[midnight] = fixed[midnight]
+    results[f"{best_fixed} (best in hindsight)"] = fixed[best_fixed]
 
     rows = []
     for name, r in results.items():

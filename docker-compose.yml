@@ -37,5 +37,15 @@ services:
       db:
         condition: service_healthy
 
+  scheduler:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "app.scheduler.cli", "worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gridpilot}:${POSTGRES_PASSWORD:-gridpilot}@db:5432/${POSTGRES_DB:-gridpilot}
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

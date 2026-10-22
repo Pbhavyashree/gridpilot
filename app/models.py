@@ -10,7 +10,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base
+from app.db import Base, UTCDateTime
 
 
 class Price(Base):
@@ -46,6 +46,44 @@ class Forecast(Base):
     metric: Mapped[str] = mapped_column(String(16), primary_key=True)  # price | carbon
     model: Mapped[str] = mapped_column(String(32), primary_key=True)
     value: Mapped[float] = mapped_column(Float)
+
+
+class Job(Base):
+    """A flexible job that must finish by its deadline.
+
+    Lifecycle:  planned -> running -> succeeded | failed
+                planned -> missed     (the worker wasn't running and the deadline can't be met)
+                planned -> cancelled
+    Once its window has passed and real data exists, realised cost and CO2 are filled in
+    ("settled"), so planned and actual can be compared.
+    """
+
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120))
+    task: Mapped[str] = mapped_column(String(64))
+    duration_hours: Mapped[int] = mapped_column(Integer)
+    power_kw: Mapped[float] = mapped_column(Float, default=1.0)
+    earliest_start: Mapped[datetime] = mapped_column(UTCDateTime)
+    deadline: Mapped[datetime] = mapped_column(UTCDateTime)
+    objective: Mapped[str] = mapped_column(String(16))  # cost | carbon | blend
+    carbon_weight: Mapped[float] = mapped_column(Float, default=0.5)
+
+    status: Mapped[str] = mapped_column(String(16), default="planned", index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    planned_start: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    planned_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    replan_count: Mapped[int] = mapped_column(Integer, default=0)
+    expected_cost_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_co2_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # snapshot for /explain
+
+    actual_start: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    actual_end: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    realised_cost_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    realised_co2_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class IngestRun(Base):

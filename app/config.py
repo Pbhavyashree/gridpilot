@@ -19,3 +19,12 @@ AWATTAR_BASE_URL = os.getenv("AWATTAR_BASE_URL", "https://api.awattar.de")
 
 HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "30"))
 HTTP_RETRIES = int(os.getenv("HTTP_RETRIES", "3"))
+
+# Scheduler
+FORECAST_MODEL = os.getenv("FORECAST_MODEL", "profile_4w")  # won the Phase 2 backtest on regret
+MAX_HORIZON_HOURS = int(os.getenv("MAX_HORIZON_HOURS", "72"))  # forecasts get poor further out
+MAX_DURATION_HOURS = int(os.getenv("MAX_DURATION_HOURS", "24"))
+REPLAN_FREEZE_MINUTES = int(os.getenv("REPLAN_FREEZE_MINUTES", "15"))  # don't move jobs about to start
+
+# If set, POST/DELETE on /jobs need the header  X-API-Key: <value>.  Leave empty for local dev.
+API_KEY = os.getenv("API_KEY", "")

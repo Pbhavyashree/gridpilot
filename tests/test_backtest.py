@@ -51,6 +51,11 @@ def test_backtest_on_noisy_weekly_data_ranks_sensibly():
     for model in ["naive_day", "naive_week", "profile_4w"]:
         assert board.loc[model, "regret"] < board.loc["fixed_00:00", "regret"]
 
+    # The best fixed hour in hindsight is a much tougher reference than midnight.
+    hindsight = [m for m in board.index if m.endswith("(best in hindsight)")]
+    assert len(hindsight) == 1
+    assert board.loc[hindsight[0], "regret"] < board.loc["fixed_00:00", "regret"]
+
 
 def test_markdown_output():
     actual = [10.0] * 24
