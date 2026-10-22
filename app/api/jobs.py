@@ -134,6 +134,9 @@ def explain_job(job_id: int, session=Depends(get_session)):
         f"versus {asap['cost_eur']:.4f} EUR and {asap['co2_kg']:.3f} kg if it ran as soon as possible "
         f"({pct(savings['cost_pct'])} cheaper, {pct(savings['co2_pct'])} less CO2)."
     )
+    used = {m: name for m, name in (plan.get("forecast_models_used") or {}).items() if name}
+    if used:
+        summary += " Forecast hours came from: " + "; ".join(f"{m} {name}" for m, name in used.items()) + "."
     kinds = {}
     for point in plan["curve"]:
         for key in ("price_kind", "carbon_kind"):
@@ -141,6 +144,14 @@ def explain_job(job_id: int, session=Depends(get_session)):
             kinds[key][point[key]] += 1
 
     return {"job": job_out(job), "summary": summary, "data_used": kinds, **plan}
+
+
+@router.get("/models")
+def trained_models():
+    """The trained lgbm forecasters: when they were trained and on how much data."""
+    from app.forecast.live import model_info
+
+    return model_info()
 
 
 @router.delete("/jobs/{job_id}", dependencies=[Depends(require_api_key)])

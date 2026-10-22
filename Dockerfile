@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-# Run as a non-root user.
-RUN useradd --create-home gridpilot
+# Run as a non-root user. models/ is created here so the shared volume is writable by that user.
+RUN useradd --create-home gridpilot && mkdir -p /app/models && chown gridpilot /app/models
 USER gridpilot
 
 EXPOSE 8000

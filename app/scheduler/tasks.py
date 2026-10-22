@@ -46,8 +46,19 @@ def _ingest(session) -> str:
     return "ingest run finished"
 
 
+def _retrain_models(session) -> str:
+    from app.forecast.live import train_and_save
+
+    results = []
+    for metric in ("price", "carbon"):
+        meta = train_and_save(session, metric)
+        results.append(f"{metric}: {meta['train_days']} days through {meta['trained_through']}")
+    return "retrained lgbm: " + "; ".join(results)
+
+
 TASKS: dict[str, Task] = {
     "demo": Task("Does nothing but log; for trying the scheduler out", _demo),
     "refresh_forecasts": Task("Forecast tomorrow's price and carbon and store it", _refresh_forecasts),
     "ingest": Task("Run one data ingest (last 2 days + tomorrow)", _ingest),
+    "retrain_models": Task("Retrain the lgbm forecasters on all data so far", _retrain_models),
 }

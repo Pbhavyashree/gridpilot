@@ -50,7 +50,7 @@ def cmd_demo() -> None:
     tomorrow_noon = tomorrow_8.replace(hour=12)
     demo_jobs = [
         {"name": "Nightly report refresh", "task": "demo", "duration_hours": 2, "deadline": tomorrow_8, "objective": "cost"},
-        {"name": "Weekly model retrain", "task": "demo", "duration_hours": 4, "power_kw": 5.0, "deadline": now + timedelta(hours=48), "objective": "carbon"},
+        {"name": "Weekly model retrain", "task": "retrain_models", "duration_hours": 4, "power_kw": 5.0, "deadline": now + timedelta(hours=48), "objective": "carbon"},
         {"name": "Database backup", "task": "demo", "duration_hours": 1, "deadline": now + timedelta(hours=12), "objective": "blend", "carbon_weight": 0.5},
         {"name": "Refresh forecasts", "task": "refresh_forecasts", "duration_hours": 1, "deadline": tomorrow_noon, "objective": "cost"},
         {"name": "Ingest catch-up", "task": "ingest", "duration_hours": 1, "deadline": now + timedelta(hours=6), "objective": "carbon"},

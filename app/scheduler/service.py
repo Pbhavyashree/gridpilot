@@ -47,6 +47,7 @@ def _snapshot(placement: Placement, curve: pd.DataFrame, now: datetime) -> str:
         {
             "planned_at": now.isoformat(),
             "forecast_model": config.FORECAST_MODEL,
+            "forecast_models_used": curve.attrs.get("models_used", {}),
             "objective": placement.objective,
             "carbon_weight": placement.carbon_weight,
             "candidates": placement.candidates,

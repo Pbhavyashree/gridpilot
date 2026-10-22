@@ -3,7 +3,8 @@
     python -m app.forecast.cli backtest --days 365            # baselines + lgbm (if weather is loaded) + savings simulation
     python -m app.forecast.cli backtest --days 365 --no-ml    # baselines only (fast)
     python -m app.forecast.cli backtest --days 365 --window 3
-    python -m app.forecast.cli forecast --model profile_4w    # forecast tomorrow and save it
+    python -m app.forecast.cli forecast --model lgbm          # forecast tomorrow and save it
+    python -m app.forecast.cli train                          # train the live lgbm models (weekly)
 """
 
 import argparse
@@ -88,6 +89,18 @@ def cmd_backtest(days: int, window: int, metrics: list[str], use_ml: bool = True
         print(f"Saved {out} and the per-hour predictions as CSV in {REPORTS_DIR}/")
 
 
+def cmd_train(metrics: list[str]) -> None:
+    from app.forecast.live import train_and_save
+
+    init_db()
+    with SessionLocal() as session:
+        for metric in metrics:
+            meta = train_and_save(session, metric)
+            weather = "with weather" if meta["uses_weather"] else "WITHOUT weather (load it: python -m app.ingest.cli weather)"
+            print(f"[OK]   {metric}: trained on {meta['train_days']} days through {meta['trained_through']}, {weather}")
+    print("Saved to the models/ folder. The scheduler picks them up automatically.")
+
+
 def cmd_forecast(model: str, metrics: list[str]) -> None:
     init_db()
     tomorrow = local_today() + timedelta(days=1)
@@ -116,13 +129,18 @@ def main() -> None:
     bt.add_argument("--no-ml", action="store_true", help="skip the LightGBM model (faster)")
 
     fc = sub.add_parser("forecast")
-    fc.add_argument("--model", choices=list(MODELS), default="profile_4w")
+    fc.add_argument("--model", choices=[*MODELS, "lgbm"], default="lgbm")
     fc.add_argument("--metric", choices=["price", "carbon", "both"], default="both")
+
+    tr = sub.add_parser("train")
+    tr.add_argument("--metric", choices=["price", "carbon", "both"], default="both")
 
     args = parser.parse_args()
     metrics = ["price", "carbon"] if args.metric == "both" else [args.metric]
     if args.command == "backtest":
         cmd_backtest(args.days, args.window, metrics, use_ml=not args.no_ml)
+    elif args.command == "train":
+        cmd_train(metrics)
     else:
         cmd_forecast(args.model, metrics)
 

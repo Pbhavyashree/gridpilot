@@ -57,7 +57,7 @@ def test_list_and_filter(client):
     assert len(client.get("/jobs").json()) == 1
     assert client.get("/jobs", params={"status": "succeeded"}).json() == []
     assert client.get("/jobs/999").status_code == 404
-    assert {t["task"] for t in client.get("/tasks").json()} == {"demo", "refresh_forecasts", "ingest"}
+    assert {t["task"] for t in client.get("/tasks").json()} == {"demo", "refresh_forecasts", "ingest", "retrain_models"}
 
 
 def test_api_key_enforced_when_set(client, monkeypatch):

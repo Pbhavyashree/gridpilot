@@ -24,7 +24,9 @@ HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "30"))
 HTTP_RETRIES = int(os.getenv("HTTP_RETRIES", "3"))
 
 # Scheduler
-FORECAST_MODEL = os.getenv("FORECAST_MODEL", "profile_4w")  # won the Phase 2 backtest on regret
+# lgbm won the Phase 4 backtest. Until a model is trained it falls back to profile_4w automatically.
+FORECAST_MODEL = os.getenv("FORECAST_MODEL", "lgbm")
+MODEL_DIR = os.getenv("MODEL_DIR", "models")
 MAX_HORIZON_HOURS = int(os.getenv("MAX_HORIZON_HOURS", "72"))  # forecasts get poor further out
 MAX_DURATION_HOURS = int(os.getenv("MAX_DURATION_HOURS", "24"))
 REPLAN_FREEZE_MINUTES = int(os.getenv("REPLAN_FREEZE_MINUTES", "15"))  # don't move jobs about to start

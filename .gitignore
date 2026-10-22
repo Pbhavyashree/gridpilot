@@ -22,3 +22,6 @@ Thumbs.db
 
 # Backtest output (regenerate any time)
 reports/
+
+# Trained models (regenerate with: python -m app.forecast.cli train)
+models/

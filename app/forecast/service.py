@@ -8,12 +8,7 @@ from sqlalchemy import func, select
 
 from app import models
 from app.db import upsert
-from app.forecast.baselines import (
-    METRIC_COLUMNS,
-    forecast_day,
-    local_hour_to_utc,
-    to_day_hour_matrix,
-)
+from app.forecast.baselines import METRIC_COLUMNS, local_hour_to_utc, to_day_hour_matrix
 from app.queries import hourly_carbon, hourly_prices
 
 LOADERS = {"price": hourly_prices, "carbon": hourly_carbon}
@@ -28,8 +23,9 @@ def load_matrix(session, metric: str, first_day: date, last_day: date) -> pd.Dat
 
 def make_and_store_forecast(session, metric: str, model: str, target_day: date) -> list[dict]:
     """Forecast one target day and save it. Returns the stored rows."""
-    matrix = load_matrix(session, metric, target_day - timedelta(days=35), target_day)
-    values = forecast_day(matrix, metric, target_day, model)
+    from app.forecast.live import forecast_values
+
+    values, _ = forecast_values(session, metric, model, target_day)
     made_at = datetime.now(timezone.utc).replace(microsecond=0)
 
     rows = []

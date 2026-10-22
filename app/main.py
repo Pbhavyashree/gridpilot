@@ -68,7 +68,7 @@ def prices(hours_back: int = Query(24, ge=1, le=24 * 31), hours_ahead: int = Que
 @app.get("/forecast")
 def forecast(
     metric: Literal["price", "carbon"] = "price",
-    model: Literal["naive_day", "naive_week", "profile_4w"] = "profile_4w",
+    model: Literal["naive_day", "naive_week", "profile_4w", "lgbm"] = "profile_4w",
     session=Depends(get_session),
 ):
     """The most recent stored forecast. Create one with: python -m app.forecast.cli forecast"""
