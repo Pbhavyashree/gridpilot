@@ -16,10 +16,21 @@ const RIBBON = { priceTop: 34, priceH: 92, gap: 10, cellH: 64 };
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function hexToRgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function mix(a, b, t) { return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
-function carbonColour(g) {
+// Colours are relative to the hours on screen: the cleanest hour is teal, the dirtiest brown.
+// On a windless week every hour is dirty, and a fixed scale would paint them all the same brown.
+// A minimum span keeps a flat day from exaggerating tiny differences.
+const MIN_SPAN = 60; // g CO2/kWh
+function carbonScale(pts) {
+  const vals = pts.map((p) => p.g_per_kwh).filter((v) => v != null);
+  if (!vals.length) return { lo: 0, span: MIN_SPAN };
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = Math.max(hi - lo, MIN_SPAN);
+  return { lo: lo - (span - (hi - lo)) / 2, span };
+}
+function carbonColour(g, scale) {
   if (g == null) return cssVar("--line");
   const lo = hexToRgb(cssVar("--wind")), mid = hexToRgb(cssVar("--straw")), hi = hexToRgb(cssVar("--lignite"));
-  const t = Math.min(1, Math.max(0, (g - 100) / 400)); // 100 g/kWh = cleanest colour, 500 = dirtiest
+  const t = Math.min(1, Math.max(0, (g - scale.lo) / scale.span));
   const rgb = t < 0.5 ? mix(lo, mid, t / 0.5) : mix(mid, hi, (t - 0.5) / 0.5);
   return `rgb(${rgb.join(",")})`;
 }
@@ -78,8 +89,10 @@ function renderAnswer() {
   const cost = p.savings.cost_pct ?? 0, co2 = p.savings.co2_pct ?? 0;
 
   if (p.starts_now || (pct(cost) < 1 && pct(co2) < 1)) {
-    $("#answer").textContent = "Start it now.";
-    $("#reason").textContent = `Within the next ${o.within_hours} hours, no other time is cleaner or cheaper for a ${len}.`;
+    // Jobs start on the full hour, so "now" usually means the next one: say which.
+    const soon = (start - Date.now()) / 60000 > 2;
+    $("#answer").textContent = soon ? `Start at ${fmtTime.format(start)}.` : "Start it now.";
+    $("#reason").textContent = `${soon ? "That's the next full hour. " : ""}Within the next ${o.within_hours} hours, no other time is cleaner or cheaper for a ${len}.`;
     return;
   }
   $("#answer").textContent = `Start it ${fmtDayTime.format(start)}.`;
@@ -124,9 +137,10 @@ function renderRibbon() {
   }
 
   // carbon cells
+  const scale = carbonScale(pts);
   pts.forEach((p, i) => {
     const late = deadline && new Date(p.ts) >= deadline ? " late" : "";
-    s += `<rect class="cell${late}" style="--i:${i}" x="${x(i) + 0.5}" y="${cellTop}" width="${Math.max(cw - 1, 1)}" height="${cellH}" fill="${carbonColour(p.g_per_kwh)}"/>`;
+    s += `<rect class="cell${late}" style="--i:${i}" x="${x(i) + 0.5}" y="${cellTop}" width="${Math.max(cw - 1, 1)}" height="${cellH}" fill="${carbonColour(p.g_per_kwh, scale)}"/>`;
   });
 
   // price line: published solid, forecast dashed
